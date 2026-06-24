@@ -1,1 +1,5 @@
-"""RocketKV baseline — implementation pending."""
+"""RocketKV baseline."""
+
+from compressors.rocketkv import RocketKVCompressor
+
+__all__ = ["RocketKVCompressor"]

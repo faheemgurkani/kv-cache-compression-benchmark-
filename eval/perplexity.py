@@ -1,28 +1,54 @@
-"""Perplexity evaluation for compressed KV caches."""
+"""Perplexity evaluation (paper-independent)."""
 
 from __future__ import annotations
 
-from pathlib import Path
+import math
 
-import yaml
-from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+from tqdm import tqdm
 
-
-def load_eval_config(config_path: Path | str = "configs/eval.yaml") -> dict:
-    with Path(config_path).open() as f:
-        return yaml.safe_load(f)
+from framework.model import ModelLayer
 
 
-def load_wikitext2(config: dict | None = None):
-    config = config or load_eval_config()
-    wikitext_cfg = config["wikitext"]
-    return load_dataset(wikitext_cfg["name"], wikitext_cfg["config"], split=wikitext_cfg["split"])
+@torch.no_grad()
+def evaluate_perplexity(
+    model_layer: ModelLayer,
+    input_ids: torch.Tensor,
+    max_length: int | None = None,
+    stride: int = 512,
+) -> float:
+    """Sliding-window perplexity following HuggingFace Transformers guidance."""
+    model = model_layer.model
+    device = model_layer.device
+    max_length = max_length or getattr(model.config, "max_position_embeddings", input_ids.size(1))
+    seq_len = input_ids.size(1)
 
+    nll_sum = 0.0
+    n_tokens = 0
+    prev_end_loc = 0
 
-def evaluate_perplexity(model_path: str, dataset=None) -> float:
-    """Compute perplexity. Full implementation pending."""
-    _ = AutoTokenizer.from_pretrained(model_path)
-    _ = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype="auto")
-    _ = dataset or load_wikitext2()
-    raise NotImplementedError("Perplexity evaluation not yet implemented.")
+    for begin_loc in tqdm(range(0, seq_len, stride), desc="perplexity", leave=False):
+        end_loc = min(begin_loc + max_length, seq_len)
+        trg_len = end_loc - prev_end_loc
+        window = input_ids[:, begin_loc:end_loc].to(device)
+        target_ids = window.clone()
+        target_ids[:, :-trg_len] = -100
+
+        outputs = model(window, labels=target_ids)
+        neg_log_likelihood = outputs.loss
+
+        num_valid_tokens = (target_ids != -100).sum().item()
+        batch_size = target_ids.size(0)
+        num_loss_tokens = num_valid_tokens - batch_size
+        nll_sum += neg_log_likelihood.item() * num_loss_tokens
+        n_tokens += num_loss_tokens
+
+        prev_end_loc = end_loc
+        if end_loc == seq_len:
+            break
+
+    if n_tokens == 0:
+        raise ValueError("No tokens available for perplexity evaluation.")
+
+    avg_nll = nll_sum / n_tokens
+    return math.exp(avg_nll)

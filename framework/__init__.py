@@ -1,0 +1,16 @@
+"""Core infrastructure for KV-cache compression benchmarking."""
+
+from framework.config import load_eval_config, load_model_config
+from framework.device import get_device
+from framework.kv_cache import apply_compressor, extract_layer_kv, get_cache_size_bytes
+from framework.model import ModelLayer
+
+__all__ = [
+    "ModelLayer",
+    "apply_compressor",
+    "extract_layer_kv",
+    "get_cache_size_bytes",
+    "get_device",
+    "load_eval_config",
+    "load_model_config",
+]

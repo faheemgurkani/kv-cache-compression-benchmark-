@@ -1,41 +1,71 @@
-# Environment
+# ── Secrets & local environment ──────────────────────────────────────────────
 .venv/
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
 
-# Python
+# HuggingFace / PyTorch / dataset caches (downloaded at runtime)
+.cache/
+.huggingface/
+
+# ── Python ─────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 *.egg-info/
+.eggs/
 dist/
 build/
+pip-wheel-metadata/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
 
-# Jupyter
+# ── Jupyter ────────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
 
-# Model weights (download via scripts/download_model.py)
+# ── Model weights (~3 GB; download via scripts/download_model.py) ──────────────
 models/*/
 !models/.gitkeep
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.gguf
 
-# Datasets (download via HuggingFace datasets)
+# ── Datasets (WikiText-2 / C4 fetched via HuggingFace datasets) ────────────────
 datasets/wikitext2/*
 datasets/c4/*
 !datasets/wikitext2/.gitkeep
 !datasets/c4/.gitkeep
 
-# Experiment outputs
+# ── Experiment outputs ─────────────────────────────────────────────────────────
 results/*
 !results/.gitkeep
 plots/*
 !plots/.gitkeep
 wandb/
+*.log
+logs/
 
-# OS
+# ── IDE & OS ───────────────────────────────────────────────────────────────────
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
