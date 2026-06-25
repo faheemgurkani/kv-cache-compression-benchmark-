@@ -369,3 +369,73 @@ If you follow this design:
 - True KV-level control of LLM inference without model surgery
 - Publication-grade metric structure (quality / memory / throughput)
 - Reproducible on Apple Silicon with documented eager-attention tradeoff
+
+---
+
+## 11. Design Verification Checklist
+
+Verification against common KV-compression mistakes (checked against current codebase).
+
+### Mistake 1: Compressing full KV globally
+
+**Rule:** compress per layer, per head, per token vector — not one flattened cache blob.
+
+| Check | Status | Evidence |
+|---|---|---|
+| Per layer | ✅ | `apply_compressor()` loops `iter_layer_kv()`; one `compress()` call per layer |
+| Per head + token | ✅ | TurboQuant ops apply on last dim `D` (head_dim); each `(batch, head, token)` vector transformed independently |
+| Not global | ✅ | No code flattens all layers/heads/tokens into a single matrix |
+
+### Mistake 2: Ignoring attention compatibility
+
+**Rule:** validate `q @ k.T` impact, not just tensor reconstruction error.
+
+| Check | Status | Evidence |
+|---|---|---|
+| Reconstruction error tested | ✅ | `test_turboquant.py`, `validate_turboquant.py --phase stages` |
+| Attention score test (`q @ k.T`) | ❌ **Gap** | No automated test; manual check shows score RMSE ~1.35 even when tensor RMSE < 2.0 |
+| Perplexity with compressed KV | ❌ **Gap** | `eval/perplexity.py` uses uncompressed forward only |
+
+**Action needed:** add attention-score drift test and route perplexity through `KVCacheEngine` for true end-to-end quality.
+
+### Mistake 3: Storing full S matrix
+
+**Rule:** never persist `d × d` projection matrix; use fixed seed + implicit regeneration.
+
+| Check | Status | Evidence |
+|---|---|---|
+| S not in payload | ✅ | `TurboQuantTensorPayload` stores only `indices`, `qjl_bits`, `norm_r` |
+| Regenerated from seed | ✅ | `projection_matrix(dim, seed=seed+dim)` in `quantizers/qjl.py` |
+| Runtime cache only | ✅ | `_projections` dict in `TurboQuantPipeline` — in-memory, not serialized |
+
+### Mistake 4: Incorrect Hadamard scaling
+
+**Rule:** WHT must be orthonormal (`H^T H = I`) plus explicit `÷√D` normalization.
+
+| Check | Status | Evidence |
+|---|---|---|
+| Orthonormal WHT (CPU/MPS) | ✅ | Scipy path: `H / √n`; roundtrip error ~1e-6 |
+| Normalize + inverse pairing | ✅ | Compress: `÷√D` after WHT; decompress: `×√D` before inverse WHT |
+| CUDA FHT path | ⚠️ | `fast-hadamard-transform` may use different scaling; verify on CUDA before trusting |
+
+### Reusability across papers
+
+The `KVCompressor` interface is the single swap point. Other methods plug in without touching model, engine, or eval.
+
+| Paper | How it maps | Status |
+|---|---|---|
+| **KIVI** | Replace `compress_kv()` with asymmetric scalar INT quant only (skip WHT/QJL) | 🔜 stub in `compressors/kivi.py` |
+| **QJL** | Replace residual stage: skip Lloyd-Max, keep `sign(Sx)` projection codec | 🔜 stub in `compressors/qjl.py`; math in `quantizers/qjl.py` |
+| **RocketKV** | Replace whole compressor: top-k token selection + eviction | 🔜 stub in `compressors/rocketkv.py` |
+| **TurboQuant** | Full pipeline in `quantizers/turboquant_pipeline.py` | ✅ implemented |
+
+```text
+KVCacheEngine (fixed)
+       │
+       ├── TurboQuantCompressor   → WHT + Lloyd-Max + QJL
+       ├── KIVICompressor         → scalar quant only
+       ├── QJLCompressor          → projection sign only
+       └── RocketKVCompressor     → token selection + eviction
+```
+
+Same engine, same eval runner, same reporting — only `compressors/` changes.

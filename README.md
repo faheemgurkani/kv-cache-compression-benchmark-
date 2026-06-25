@@ -352,6 +352,8 @@ Cache directory: `.cache/huggingface/datasets/` (gitignored).
 5. **Phase 3** — QJL baseline
 6. **Phase 4** — RocketKV baseline
 
+See [docs/SYSTEM_DESIGN.md §11](docs/SYSTEM_DESIGN.md#11-design-verification-checklist) for verification against common KV-compression mistakes (granularity, attention, QJL storage, Hadamard scaling, paper reusability).
+
 ---
 
 ## License
