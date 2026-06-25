@@ -1,3 +1,6 @@
+# ── Local planning notes (not for public repo) ────────────────────────────────
+docs/PLAN.md
+
 # ── Secrets & local environment ──────────────────────────────────────────────
 .venv/
 .env
